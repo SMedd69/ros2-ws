@@ -1,0 +1,2 @@
+float32 percentage
+bool charging
