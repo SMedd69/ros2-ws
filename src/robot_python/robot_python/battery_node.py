@@ -29,7 +29,7 @@ class BatteryNode(Node):
         self.get_logger().info("Battery Node started")
 
     def publish_battery(self):
-        self.battery_level -= 1.0
+        # self.battery_level -= 1.0
 
         if self.battery_level <= 0:
             self.battery_level = 100.0
@@ -48,8 +48,6 @@ class BatteryNode(Node):
         status_msg.reason = "battery status ok"
 
         self.status_publisher_.publish(status_msg)
-
-        self.get_logger().info(f"Battery: {msg.percentage:1f}%" f"Status: {status_msg.level} | " f"{status_msg.reason}")
 
 def main(args=None):
     rclpy.init(args=args)

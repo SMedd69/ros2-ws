@@ -45,11 +45,6 @@ class CameraNode(Node):
 
         self.status_publisher_.publish(status_msg)
 
-        self.get_logger().info(
-            f"Camera: {msg.thinks} | "
-            f"Status: {status_msg.level} | " f"{status_msg.reason}"
-        )
-
 def main(args=None):
 
     rclpy.init(args=args)

@@ -1,19 +1,24 @@
-#pragma once
+#ifndef MOTOR_CONTROLLER_HPP
+#define MOTOR_CONTROLLER_HPP
 
-#include "robot_cpp/motor.hpp"
+#include <string>
 
 class MotorController
 {
 public:
+
     MotorController();
 
-    void forward();
-    void backward();
-    void turn_left();
-    void turn_right();
+    void forward(double speed);
+    void backward(double speed);
+
+    void turn_left(double speed);
+    void turn_right(double speed);
+
+    void turn_around(double speed);
+
     void stop();
 
-private:
-    Motor left_motor_;
-    Motor right_motor_;
 };
+
+#endif

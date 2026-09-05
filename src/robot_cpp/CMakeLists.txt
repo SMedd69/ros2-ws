@@ -7,6 +7,7 @@ endif()
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(robot_interfaces REQUIRED)
 
 include_directories(
@@ -20,9 +21,9 @@ add_executable(motor_node
   src/motor.cpp
 )
 
-ament_target_dependencies(
-  motor_node
+ament_target_dependencies(motor_node
   rclcpp
+  geometry_msgs
   robot_interfaces
 )
 

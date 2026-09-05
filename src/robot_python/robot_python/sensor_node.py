@@ -1,23 +1,53 @@
-import random
+import math
 
 import rclpy
 from rclpy.node import Node
 
-from robot_interfaces.msg import Distance, ComponentStatus
+from sensor_msgs.msg import PointCloud2
+from sensor_msgs_py import point_cloud2
+
+from robot_interfaces.msg import Sensor, ComponentStatus
+
 
 class SensorNode(Node):
 
     def __init__(self):
         super().__init__(node_name="sensor_node")
 
-        self.obstacle = True
-        self.level = 0
+        # ---------------------------------------------------------
+        # Configuration
+        # ---------------------------------------------------------
 
-        self.sensor_publisher_ = self.create_publisher(
-            Distance,
-            "/robot/distance",
+        self.obstacle_threshold = 0.7
+
+        # Hauteur approximative considérée comme "sol".
+        # Cette valeur sera affinée avec les tests.
+        self.ground_z_threshold = 0.08
+
+        # ---------------------------------------------------------
+        # Subscriber : LiDAR 3D
+        # ---------------------------------------------------------
+
+        self.lidar_subscription_ = self.create_subscription(
+            PointCloud2,
+            "/simulation/lidar_points/points",
+            self.lidar_callback,
             10
         )
+
+        # ---------------------------------------------------------
+        # Publisher : perception
+        # ---------------------------------------------------------
+
+        self.sensor_publisher_ = self.create_publisher(
+            Sensor,
+            "/robot/sensor",
+            10
+        )
+
+        # ---------------------------------------------------------
+        # Publisher : état du composant
+        # ---------------------------------------------------------
 
         self.status_publisher_ = self.create_publisher(
             ComponentStatus,
@@ -25,10 +55,10 @@ class SensorNode(Node):
             10
         )
 
-        self.distance_timer = self.create_timer(
-            0.1,
-            self.publish_distance
-        )
+        # ---------------------------------------------------------
+        # Heartbeat
+        # ---------------------------------------------------------
+
         self.status_timer = self.create_timer(
             0.1,
             self.publish_status
@@ -36,35 +66,330 @@ class SensorNode(Node):
 
         self.get_logger().info("Sensor Node started")
 
-    def publish_distance(self):
-        distance = random.uniform(0.3, 3.5)
-        self.obstacle = distance < 0.7
+        self.get_logger().info(
+            "Waiting for 3D LiDAR data on "
+            "/simulation/lidar_points/points"
+        )
 
-        distance_msg = Distance()
-        distance_msg.distance = distance
-        distance_msg.obstacle = self.obstacle
-    
-        self.sensor_publisher_.publish(distance_msg)
+    # =========================================================
+    # LIDAR CALLBACK
+    # =========================================================
+
+    def lidar_callback(self, msg: PointCloud2):
+
+        points = self.get_points(msg)
+
+        if not points:
+            self.get_logger().warn(
+                "PointCloud2 contains no valid points."
+            )
+            return
+
+        # -----------------------------------------------------
+        # Analyse des points
+        # -----------------------------------------------------
+
+        left_points = []
+        center_points = []
+        right_points = []
+
+        ground_points = []
+        obstacle_points = []
+
+        for x, y, z in points:
+
+            # -------------------------------------------------
+            # Distance horizontale devant le robot
+            # -------------------------------------------------
+
+            horizontal_distance = math.sqrt(
+                x * x +
+                y * y
+            )
+
+            # -------------------------------------------------
+            # Détection du sol
+            # -------------------------------------------------
+
+            if z <= self.ground_z_threshold:
+                ground_points.append(
+                    (x, y, z)
+                )
+
+            # -------------------------------------------------
+            # Détection obstacle
+            # -------------------------------------------------
+
+            if (
+                x > 0.0
+                and horizontal_distance <= self.obstacle_threshold
+                and z > self.ground_z_threshold
+            ):
+                obstacle_points.append(
+                    (x, y, z)
+                )
+
+            # -------------------------------------------------
+            # Zones gauche / centre / droite
+            # -------------------------------------------------
+
+            angle = math.atan2(y, x)
+
+            if -0.5 <= angle < -0.166:
+                right_points.append(
+                    (x, y, z)
+                )
+
+            elif -0.166 <= angle <= 0.166:
+                center_points.append(
+                    (x, y, z)
+                )
+
+            elif 0.166 < angle <= 0.5:
+                left_points.append(
+                    (x, y, z)
+                )
+
+        # -----------------------------------------------------
+        # Distances par zone
+        # -----------------------------------------------------
+
+        right_distance = self.get_min_distance(
+            right_points
+        )
+
+        center_distance = self.get_min_distance(
+            center_points
+        )
+
+        left_distance = self.get_min_distance(
+            left_points
+        )
+
+        # -----------------------------------------------------
+        # Obstacles
+        # -----------------------------------------------------
+
+        obstacle_detected = len(obstacle_points) > 0
+
+        # -----------------------------------------------------
+        # Chemins libres
+        # -----------------------------------------------------
+
+        path_left = (
+            left_distance > self.obstacle_threshold
+        )
+
+        path_center = (
+            center_distance > self.obstacle_threshold
+        )
+
+        path_right = (
+            right_distance > self.obstacle_threshold
+        )
+
+        # -----------------------------------------------------
+        # Sol
+        # -----------------------------------------------------
+
+        ground_detected = (
+            len(ground_points) > 0
+        )
+
+        ground_distance = (
+            self.get_min_distance(ground_points)
+            if ground_points
+            else 0.0
+        )
+
+        # -----------------------------------------------------
+        # Edge detection
+        # -----------------------------------------------------
+
+        edge_detected = False
+
+        # -----------------------------------------------------
+        # Slope detection
+        # -----------------------------------------------------
+
+        slope_detected = False
+
+        # -----------------------------------------------------
+        # Construction du message
+        # -----------------------------------------------------
+
+        sensor_msg = Sensor()
+
+        sensor_msg.ground_detected = ground_detected
+
+        sensor_msg.obstacle_detected = (
+            obstacle_detected
+        )
+
+        sensor_msg.edge_detected = (
+            edge_detected
+        )
+
+        sensor_msg.slope_detected = (
+            slope_detected
+        )
+
+        sensor_msg.ground_distance = (
+            float(ground_distance)
+        )
+
+        sensor_msg.front_distance = (
+            float(center_distance)
+        )
+
+        sensor_msg.left_distance = (
+            float(left_distance)
+        )
+
+        sensor_msg.right_distance = (
+            float(right_distance)
+        )
+
+        sensor_msg.path_left = (
+            path_left
+        )
+
+        sensor_msg.path_center = (
+            path_center
+        )
+
+        sensor_msg.path_right = (
+            path_right
+        )
+
+        # -----------------------------------------------------
+        # Les angles d'obstacle ne sont plus calculés
+        # directement depuis LaserScan.
+        #
+        # Ils seront reconstruits plus tard à partir
+        # des coordonnées 3D.
+        # -----------------------------------------------------
+
+        sensor_msg.obstacle_start_angle = 0.0
+        sensor_msg.obstacle_end_angle = 0.0
+
+        # -----------------------------------------------------
+        # Publication
+        # -----------------------------------------------------
+
+        self.sensor_publisher_.publish(
+            sensor_msg
+        )
+
+    # =========================================================
+    # EXTRACTION DES POINTS
+    # =========================================================
+
+    def get_points(self, msg: PointCloud2):
+
+        points = []
+
+        try:
+
+            point_generator = point_cloud2.read_points(
+                msg,
+                field_names=("x", "y", "z"),
+                skip_nans=True
+            )
+
+            for point in point_generator:
+
+                x = float(point[0])
+                y = float(point[1])
+                z = float(point[2])
+
+                if not math.isfinite(x):
+                    continue
+
+                if not math.isfinite(y):
+                    continue
+
+                if not math.isfinite(z):
+                    continue
+
+                points.append(
+                    (x, y, z)
+                )
+
+        except Exception as error:
+
+            self.get_logger().error(
+                f"Failed to read PointCloud2: {error}"
+            )
+
+        return points
+
+    # =========================================================
+    # DISTANCE MINIMUM
+    # =========================================================
+
+    def get_min_distance(self, points):
+
+        if not points:
+            return 15.0
+
+        distances = []
+
+        for x, y, z in points:
+
+            distance = math.sqrt(
+                x * x +
+                y * y +
+                z * z
+            )
+
+            if math.isfinite(distance):
+                distances.append(distance)
+
+        if not distances:
+            return 15.0
+
+        return min(distances)
+
+    # =========================================================
+    # STATUS / HEARTBEAT
+    # =========================================================
 
     def publish_status(self):
+
         status_msg = ComponentStatus()
 
         status_msg.component = "sensor_node"
-        status_msg.level = ComponentStatus.OK
-        status_msg.reason = "Sensor status ok"
 
-        self.status_publisher_.publish(status_msg)
+        status_msg.level = (
+            ComponentStatus.OK
+        )
+
+        status_msg.reason = (
+            "Sensor status ok"
+        )
+
+        self.status_publisher_.publish(
+            status_msg
+        )
+
+
+# =============================================================
+# MAIN
+# =============================================================
 
 def main(args=None):
 
     rclpy.init(args=args)
 
     node = SensorNode()
-    rclpy.spin(node=node)
+
+    rclpy.spin(node)
 
     node.destroy_node()
 
     rclpy.shutdown()
+
 
 if __name__ == "__main__":
     main()

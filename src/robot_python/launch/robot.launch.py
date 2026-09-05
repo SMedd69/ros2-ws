@@ -27,4 +27,10 @@ def generate_launch_description():
             name='decision_node',
             output="screen",
         ),
+        Node(
+            package="robot_python",
+            executable="safety_node",
+            name='safety_node',
+            output="screen",
+        ),
     ])

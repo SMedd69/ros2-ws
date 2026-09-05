@@ -1,36 +1,34 @@
 #include "robot_cpp/motor_controller.hpp"
 
 MotorController::MotorController()
-    : left_motor_("left"), right_motor_("right")
 {
 }
 
-void MotorController::forward()
+void MotorController::forward(double speed)
 {
-    left_motor_.forward();
-    right_motor_.forward();
+    (void)speed;
 }
 
-void MotorController::backward()
+void MotorController::backward(double speed)
 {
-    left_motor_.backward();
-    right_motor_.backward();
+    (void)speed;
 }
 
-void MotorController::turn_left()
+void MotorController::turn_left(double speed)
 {
-    left_motor_.backward();
-    right_motor_.forward();
+    (void)speed;
 }
 
-void MotorController::turn_right()
+void MotorController::turn_right(double speed)
 {
-    left_motor_.forward();
-    right_motor_.backward();
+    (void)speed;
+}
+
+void MotorController::turn_around(double speed)
+{
+    (void)speed;
 }
 
 void MotorController::stop()
 {
-    left_motor_.stop();
-    right_motor_.stop();
 }
