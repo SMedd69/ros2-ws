@@ -1,4 +1,4 @@
-#include "robot_cpp/motor_controller.hpp"
+#include "robot_cpp/motor_node/motor_controller.hpp"
 
 MotorController::MotorController()
 {

@@ -111,14 +111,14 @@
         Z = 0.5
       -->
 
-      <pose>1.5 0 0.5 0 0 0</pose>
+      <pose>2.5 0 0.5 0 0 0</pose>
 
       <link name="wall_link">
         <collision name="collision">
           <geometry>
 
             <box>
-              <size>0.10 3.0 1.0</size>
+              <size>0.10 6.0 1.0</size>
             </box>
 
           </geometry>
@@ -130,7 +130,7 @@
           <geometry>
 
             <box>
-              <size>0.10 3.0 1.0</size>
+              <size>0.10 6.0 1.0</size>
             </box>
 
           </geometry>

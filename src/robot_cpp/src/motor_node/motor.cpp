@@ -1,4 +1,4 @@
-#include "robot_cpp/motor.hpp"
+#include "robot_cpp/motor_node/motor.hpp"
 
 Motor::Motor(const std::string& name)
     : name_(name)

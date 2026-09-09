@@ -8,7 +8,6 @@ from sensor_msgs_py import point_cloud2
 
 from robot_interfaces.msg import Sensor, ComponentStatus
 
-
 class SensorNode(Node):
 
     def __init__(self):
@@ -79,73 +78,130 @@ class SensorNode(Node):
 
         points = self.get_points(msg)
 
+        # -----------------------------------------------------
+        # AUCUNE DONNÉE LiDAR
+        # -----------------------------------------------------
+
         if not points:
+
             self.get_logger().warn(
                 "PointCloud2 contains no valid points."
             )
+
+            # Fail-safe :
+            # aucune donnée LiDAR = état non sûr.
+            #
+            # Le DecisionNode verra :
+            # ground_detected = false
+            #
+            # et pourra donc commander STOP.
+
+            sensor_msg = Sensor()
+
+            sensor_msg.ground_detected = False
+            sensor_msg.obstacle_detected = False
+
+            sensor_msg.edge_detected = False
+            sensor_msg.slope_detected = False
+
+            sensor_msg.ground_distance = 0.0
+
+            sensor_msg.front_distance = 0.0
+            sensor_msg.left_distance = 0.0
+            sensor_msg.right_distance = 0.0
+
+            sensor_msg.path_left = False
+            sensor_msg.path_center = False
+            sensor_msg.path_right = False
+
+            sensor_msg.obstacle_start_angle = 0.0
+            sensor_msg.obstacle_end_angle = 0.0
+
+            self.sensor_publisher_.publish(
+                sensor_msg
+            )
+
             return
 
         # -----------------------------------------------------
         # Analyse des points
         # -----------------------------------------------------
-
         left_points = []
         center_points = []
         right_points = []
 
         ground_points = []
+        navigation_points = []
+
         obstacle_points = []
 
+        # -----------------------------------------------------
+        # Classification des points
+        # -----------------------------------------------------
         for x, y, z in points:
 
             # -------------------------------------------------
-            # Distance horizontale devant le robot
+            # Distance horizontale
             # -------------------------------------------------
-
-            horizontal_distance = math.sqrt(
-                x * x +
-                y * y
-            )
+            horizontal_distance = math.sqrt(x * x + y * y)
 
             # -------------------------------------------------
             # Détection du sol
             # -------------------------------------------------
-
             if z <= self.ground_z_threshold:
-                ground_points.append(
-                    (x, y, z)
-                )
+
+                ground_points.append((x, y, z))
+
+                # IMPORTANT :
+                #
+                # Un point classifié comme sol ne doit PAS
+                # participer aux distances de navigation.
+                #
+                # Sinon le sol pourrait produire :
+                #
+                # front_distance = 0.33 m
+                #
+                # alors qu'il n'y a aucun obstacle.
+                continue
+
+            # -------------------------------------------------
+            # Point utilisable pour la navigation
+            # -------------------------------------------------
+            navigation_points.append((x, y, z))
 
             # -------------------------------------------------
             # Détection obstacle
             # -------------------------------------------------
-
-            if (
-                x > 0.0
-                and horizontal_distance <= self.obstacle_threshold
-                and z > self.ground_z_threshold
-            ):
-                obstacle_points.append(
-                    (x, y, z)
-                )
+            if (x > 0.0 and horizontal_distance <= self.obstacle_threshold):
+                obstacle_points.append((x, y, z))
 
             # -------------------------------------------------
-            # Zones gauche / centre / droite
+            # Angle horizontal
             # -------------------------------------------------
-
             angle = math.atan2(y, x)
 
+            # -------------------------------------------------
+            # Zone droite
+            # -------------------------------------------------
             if -0.5 <= angle < -0.166:
-                right_points.append(
-                    (x, y, z)
-                )
+                right_points.append((x, y, z))
+
+            # -------------------------------------------------
+            # Zone centrale
+            # -------------------------------------------------
 
             elif -0.166 <= angle <= 0.166:
+
                 center_points.append(
                     (x, y, z)
                 )
 
+            # -------------------------------------------------
+            # Zone gauche
+            # -------------------------------------------------
+
             elif 0.166 < angle <= 0.5:
+
                 left_points.append(
                     (x, y, z)
                 )
@@ -154,23 +210,25 @@ class SensorNode(Node):
         # Distances par zone
         # -----------------------------------------------------
 
-        right_distance = self.get_min_distance(
+        right_distance = self.get_min_horizontal_distance(
             right_points
         )
 
-        center_distance = self.get_min_distance(
+        center_distance = self.get_min_horizontal_distance(
             center_points
         )
 
-        left_distance = self.get_min_distance(
+        left_distance = self.get_min_horizontal_distance(
             left_points
         )
 
         # -----------------------------------------------------
-        # Obstacles
+        # Obstacle
         # -----------------------------------------------------
 
-        obstacle_detected = len(obstacle_points) > 0
+        obstacle_detected = (
+            len(obstacle_points) > 0
+        )
 
         # -----------------------------------------------------
         # Chemins libres
@@ -197,7 +255,9 @@ class SensorNode(Node):
         )
 
         ground_distance = (
-            self.get_min_distance(ground_points)
+            self.get_min_horizontal_distance(
+                ground_points
+            )
             if ground_points
             else 0.0
         )
@@ -220,7 +280,9 @@ class SensorNode(Node):
 
         sensor_msg = Sensor()
 
-        sensor_msg.ground_detected = ground_detected
+        sensor_msg.ground_detected = (
+            ground_detected
+        )
 
         sensor_msg.obstacle_detected = (
             obstacle_detected
@@ -263,11 +325,7 @@ class SensorNode(Node):
         )
 
         # -----------------------------------------------------
-        # Les angles d'obstacle ne sont plus calculés
-        # directement depuis LaserScan.
-        #
-        # Ils seront reconstruits plus tard à partir
-        # des coordonnées 3D.
+        # Angles d'obstacle
         # -----------------------------------------------------
 
         sensor_msg.obstacle_start_angle = 0.0
@@ -325,10 +383,15 @@ class SensorNode(Node):
         return points
 
     # =========================================================
-    # DISTANCE MINIMUM
+    # DISTANCE HORIZONTALE MINIMUM
     # =========================================================
 
-    def get_min_distance(self, points):
+    def get_min_horizontal_distance(self, points):
+
+        # Aucun point dans cette direction.
+        #
+        # On considère alors que la zone est libre
+        # jusqu'à la portée maximale du LiDAR.
 
         if not points:
             return 15.0
@@ -337,14 +400,24 @@ class SensorNode(Node):
 
         for x, y, z in points:
 
+            # Pour la navigation, on ne tient pas compte
+            # de Z.
+            #
+            # On veut savoir :
+            #
+            # "À quelle distance horizontale se trouve
+            #  l'objet ?"
+
             distance = math.sqrt(
                 x * x +
-                y * y +
-                z * z
+                y * y
             )
 
             if math.isfinite(distance):
-                distances.append(distance)
+
+                distances.append(
+                    distance
+                )
 
         if not distances:
             return 15.0
@@ -359,7 +432,9 @@ class SensorNode(Node):
 
         status_msg = ComponentStatus()
 
-        status_msg.component = "sensor_node"
+        status_msg.component = (
+            "sensor_node"
+        )
 
         status_msg.level = (
             ComponentStatus.OK

@@ -1,5 +1,5 @@
 #include "rclcpp/rclcpp.hpp"
-#include "robot_cpp/motor_node.hpp"
+#include "robot_cpp/motor_node/motor_node.hpp"
 
 int main(int argc, char *argv[])
 {

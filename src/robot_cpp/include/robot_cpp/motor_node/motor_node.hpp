@@ -13,7 +13,7 @@
 #include "robot_interfaces/msg/safety.hpp"
 #include "robot_interfaces/msg/component_status.hpp"
 
-#include "robot_cpp/motor_controller.hpp"
+#include "robot_cpp/motor_node/motor_controller.hpp"
 
 
 class MotorNode : public rclcpp::Node

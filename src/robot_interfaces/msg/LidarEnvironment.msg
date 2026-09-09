@@ -1,0 +1,10 @@
+bool ground_detected
+bool obstacle_detected
+
+float32 ground_distance
+
+float32 front_distance
+float32 left_distance
+float32 right_distance
+
+float32 min_distance

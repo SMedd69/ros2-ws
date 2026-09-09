@@ -36,7 +36,8 @@ setup(
             'sensor_node = robot_python.sensor_node:main',
             'battery_node = robot_python.battery_node:main',
             'camera_node = robot_python.camera_node:main',
-            'safety_node = robot_python.safety_node:main'
+            'safety_node = robot_python.safety_node:main',
+            "lidar_visualizer = robot_python.lidar_visualizer:main",
         ],
     },
 )

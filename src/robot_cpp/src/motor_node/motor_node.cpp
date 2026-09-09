@@ -1,4 +1,4 @@
-#include "robot_cpp/motor_node.hpp"
+#include "robot_cpp/motor_node/motor_node.hpp"
 #include <cmath>
 
 MotorNode::MotorNode()
